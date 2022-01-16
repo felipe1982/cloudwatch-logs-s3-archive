@@ -1,0 +1,156 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Archive CloudWatch Logs to S3 every day using Lambda.
+Parameters:
+  CloudWatchLogsArchiveBucket:
+    Description: The S3 bucket where CloudWatch will archive logs.
+    Type: String
+  CodeS3Bucket:
+    Description: The name of the code bucket in S3
+    Type: String
+  CodeS3Path:
+    Description: The path of the code zip file in the code bucket in S3
+    Type: String
+  CodeS3Version:
+    Description: The S3 Object Version of the code zip file
+    Type: String
+  ScheduleExpression:
+    Description: A valid AWS Event Rule Scheduled Expression (e.g. rate(4 hours))
+    Type: String
+    Default: "rate(4 hours)"
+Resources:
+  ServerlessFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: CodeS3Bucket
+        S3Key:
+          Ref: CodeS3Path
+        S3ObjectVersion:
+          Ref: CodeS3Version
+      MemorySize: 512
+      Description: Archive CloudWatch Logs to S3 every day.
+      Handler: cloudwatch_logs_s3_archive.lambda_handler
+      Role:
+        "Fn::GetAtt":
+          - IamRole
+          - Arn
+      Timeout: 900
+      Runtime: python3.8
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "cloudwatch_logs_s3_archive"
+          POWERTOOLS_LOGGER_LOG_EVENT: "true"
+          POWERTOOLS_LOGGER_SAMPLE_RATE: "1.0"
+          LOG_LEVEL: "DEBUG"
+          S3_BUCKET: !Ref CloudWatchLogsArchiveBucket
+          ACCOUNT_ID: !Ref AWS::AccountId
+
+  IamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - sts:AssumeRole
+      Description: "Allows lambda to archive CloudWatch logs to s3."
+      Policies:
+        - PolicyName: "AllowsLambdaToArchiveCloudWatchLogsToS3"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - "logs:CreateExportTask"
+                  - "logs:Describe*"
+                  - "logs:ListTagsLogGroup"
+                Effect: Allow
+                Resource: "*"
+              - Action:
+                  - "ssm:DescribeParameters"
+                  - "ssm:GetParameter"
+                  - "ssm:GetParameters"
+                  - "ssm:GetParametersByPath"
+                  - "ssm:PutParameter"
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/log-exporter-last-export/*"
+                Effect: Allow
+              - Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/log-exporter-*"
+                Effect: Allow
+              - Sid: AllowCrossAccountObjectAcc
+                Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "s3:PutObjectAcl"
+                Resource: !Sub "arn:aws:s3:::${CloudWatchLogsArchiveBucket}/*"
+              - Sid: AllowCrossAccountBucketAcc
+                Effect: Allow
+                Action:
+                  - "s3:PutBucketAcl"
+                  - "s3:GetBucketAcl"
+                Resource: !Sub "arn:aws:s3:::${CloudWatchLogsArchiveBucket}"
+
+  EventRuleIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "events.amazonaws.com"
+            Action:
+              - sts:AssumeRole
+      Description: "Allows lambda to archive CloudWatch logs to s3."
+      Policies:
+        - PolicyName: "AllowsLambdaToArchiveCloudWatchLogsToS3"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - "logs:CreateExportTask"
+                  - "logs:Describe*"
+                  - "logs:ListTagsLogGroup"
+                Effect: Allow
+                Resource: "*"
+
+  ScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Archive CloudWatch logs to S3
+      Name: cloudwatch-logs-s3-archive-test
+      ScheduleExpression: !Ref ScheduleExpression
+      State: "ENABLED"
+      # RoleArn: !Ref EventRuleIamRole
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - "ServerlessFunction"
+              - "Arn"
+          Id: "ServerlessFunction"
+
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref "ServerlessFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ScheduledRule.Arn
+
+Outputs:
+  ServerlessFunctionArn:
+    Description: The ARN of the Lambda handler
+    Value:
+      "Fn::GetAtt":
+        - ServerlessFunction
+        - Arn
