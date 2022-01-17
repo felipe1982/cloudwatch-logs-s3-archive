@@ -41,7 +41,9 @@ def lambda_handler(event, context):
         log_groups_to_export.append(log_group["logGroupName"])
 
     for log_group_name in log_groups_to_export:
-        ssm_parameter_name = ("/log-exporter-last-export/%s" % log_group_name).replace("//", "/")
+        ssm_parameter_name = ("/log-exporter-last-export/%s" % log_group_name).replace(
+            "//", "/"
+        )
         try:
             ssm_response = ssm.get_parameter(Name=ssm_parameter_name)
             ssm_value = ssm_response["Parameter"]["Value"]
@@ -69,13 +71,22 @@ def lambda_handler(event, context):
             time.sleep(5)
 
         except logs.exceptions.LimitExceededException:
-            logger.warning("⚠   Too many concurrently running export tasks (LimitExceededException). Aborting...")
+            logger.warning(
+                "⚠   Too many concurrently running export tasks "
+                "(LimitExceededException). Aborting..."
+            )
             return
 
         except Exception as e:
-            logger.exception("✖   Error exporting %s: %s" % (log_group_name, getattr(e, "message", repr(e))))
+            logger.exception(
+                "✖   Error exporting %s: %s"
+                % (log_group_name, getattr(e, "message", repr(e)))
+            )
             continue
 
         ssm_response = ssm.put_parameter(
-            Name=ssm_parameter_name, Type="String", Value=str(export_to_time), Overwrite=True
+            Name=ssm_parameter_name,
+            Type="String",
+            Value=str(export_to_time),
+            Overwrite=True,
         )
