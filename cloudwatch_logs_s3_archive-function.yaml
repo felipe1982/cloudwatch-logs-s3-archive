@@ -24,6 +24,8 @@ Resources:
       Architectures:
         - x86_64
       Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: "log-exporter-last-export/*"
         - AWSLambdaExecute
         - Version: '2012-10-17'
           Statement:
@@ -68,54 +70,13 @@ Resources:
           LOG_LEVEL: "DEBUG"
           S3_BUCKET: !Ref CloudWatchLogsArchiveBucket
           ACCOUNT_ID: !Ref AWS::AccountId
-
-  EventRuleIamRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Principal:
-              Service:
-                - "events.amazonaws.com"
-            Action:
-              - sts:AssumeRole
-      Description: "Allows lambda to archive CloudWatch logs to s3."
-      Policies:
-        - PolicyName: "AllowsLambdaToArchiveCloudWatchLogsToS3"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Action:
-                  - "logs:CreateExportTask"
-                  - "logs:Describe*"
-                  - "logs:ListTagsLogGroup"
-                Effect: Allow
-                Resource: "*"
-
-  ScheduledRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Description: Archive CloudWatch logs to S3
-      Name: cloudwatch-logs-s3-archive-test
-      ScheduleExpression: !Ref ScheduleExpression
-      State: "ENABLED"
-      # RoleArn: !Ref EventRuleIamRole
-      Targets:
-        - Arn:
-            Fn::GetAtt:
-              - "ServerlessFunction"
-              - "Arn"
-          Id: "ServerlessFunction"
-
-  PermissionForEventsToInvokeLambda:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref "ServerlessFunction"
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn: !GetAtt ScheduledRule.Arn
+      Events:
+        CWSchedule:
+          Type: Schedule
+          Properties:
+            Description: cloudwatch-logs-s3-archive-test2
+            Enabled: True
+            Schedule: !Ref ScheduleExpression
 
 Outputs:
   ServerlessFunctionArn:
