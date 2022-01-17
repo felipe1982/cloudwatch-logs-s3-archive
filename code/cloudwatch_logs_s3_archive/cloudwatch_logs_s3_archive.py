@@ -6,9 +6,12 @@ import time
 import boto3
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logs = boto3.client("logs")
 ssm = boto3.client("ssm")
+
+print(f"logs is : {logs}")
+print(f"ssm is: {ssm}")
 
 
 def lambda_handler(event, context):
@@ -18,12 +21,12 @@ def lambda_handler(event, context):
 
     if "S3_BUCKET" not in os.environ:
         logger.error("Error: S3_BUCKET environment variable not defined")
-        return
+        raise Exception  # return False
 
-    logger.info("--> S3_BUCKET=%s" % os.environ["S3_BUCKET"])
+    logger.debug("--> S3_BUCKET=%s" % os.environ["S3_BUCKET"])
 
     ACCOUNT_ID = os.environ["ACCOUNT_ID"]
-    logger.info("--> ACCOUNT_ID=%s", ACCOUNT_ID)
+    logger.debug("--> ACCOUNT_ID=%s", ACCOUNT_ID)
 
     while True:
         response = logs.describe_log_groups(**extra_args)
@@ -34,10 +37,6 @@ def lambda_handler(event, context):
         extra_args["nextToken"] = response["nextToken"]
 
     for log_group in log_groups:
-        # response = logs.list_tags_log_group(logGroupName=log_group["logGroupName"])
-        # log_group_tags = response["tags"]
-        # if "ExportToS3" in log_group_tags and log_group_tags["ExportToS3"] == "true":
-        #     log_groups_to_export.append(log_group["logGroupName"])
         log_groups_to_export.append(log_group["logGroupName"])
 
     for log_group_name in log_groups_to_export:
@@ -75,7 +74,7 @@ def lambda_handler(event, context):
                 "⚠   Too many concurrently running export tasks "
                 "(LimitExceededException). Aborting..."
             )
-            return
+            return False
 
         except Exception as e:
             logger.exception(
