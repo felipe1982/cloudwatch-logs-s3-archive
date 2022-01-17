@@ -23,11 +23,31 @@ Resources:
       Runtime: python3.8
       Architectures:
         - x86_64
+      Timeout: 900
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "cloudwatch_logs_s3_archive"
+          POWERTOOLS_LOGGER_LOG_EVENT: "true"
+          POWERTOOLS_LOGGER_SAMPLE_RATE: "1.0"
+          LOG_LEVEL: "DEBUG"
+          S3_BUCKET: !Ref CloudWatchLogsArchiveBucket
+          ACCOUNT_ID: !Ref AWS::AccountId
+      Events:
+        CWSchedule:
+          Type: Schedule
+          Properties:
+            Description: cloudwatch-logs-s3-archive-test2
+            Enabled: True
+            Schedule: !Ref ScheduleExpression
       Policies:
-        - SSMParameterReadPolicy:
-            ParameterName: "log-exporter-last-export/*"
         - AWSLambdaExecute
-        - Version: '2012-10-17'
+        - !Ref CloudWatchLogsS3ArchiveManagedPolicy
+
+  CloudWatchLogsS3ArchiveManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+          Version: '2012-10-17'
           Statement:
             - Action:
                 - "logs:CreateExportTask"
@@ -61,22 +81,7 @@ Resources:
                 - "s3:PutBucketAcl"
                 - "s3:GetBucketAcl"
               Resource: !Sub "arn:aws:s3:::${CloudWatchLogsArchiveBucket}"
-      Timeout: 900
-      Environment:
-        Variables:
-          POWERTOOLS_SERVICE_NAME: "cloudwatch_logs_s3_archive"
-          POWERTOOLS_LOGGER_LOG_EVENT: "true"
-          POWERTOOLS_LOGGER_SAMPLE_RATE: "1.0"
-          LOG_LEVEL: "DEBUG"
-          S3_BUCKET: !Ref CloudWatchLogsArchiveBucket
-          ACCOUNT_ID: !Ref AWS::AccountId
-      Events:
-        CWSchedule:
-          Type: Schedule
-          Properties:
-            Description: cloudwatch-logs-s3-archive-test2
-            Enabled: True
-            Schedule: !Ref ScheduleExpression
+
 
 Outputs:
   ServerlessFunctionArn:
