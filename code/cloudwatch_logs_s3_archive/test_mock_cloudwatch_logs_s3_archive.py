@@ -8,47 +8,16 @@ import boto3
 import moto
 import pytest
 
+from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.fixture
-def f_os_environ():
+def f_env_vars():
     os.environ["S3_BUCKET"] = "mybucket2"
     os.environ["ACCOUNT_ID"] = "123412341234"
-
-
-@pytest.fixture
-def f_create_export_task():
-    return {
-        "logGroups": [
-            {
-                "logGroupName": "/aws/codebuild/hugo-blog",
-                "creationTime": 1544587722233,
-                "metricFilterCount": 0,
-                "arn": "arn:aws:logs:ap-southeast-2:638088845137:log-group:/aws/codebuild/hugo-blog:*",  # noqa
-                "storedBytes": 178,
-            },
-            {
-                "logGroupName": "/aws/lambda/felipe-test-ServerlessFunction-KyEtQReUd8FA",
-                "creationTime": 1642382703058,
-                "metricFilterCount": 0,
-                "arn": "arn:aws:logs:ap-southeast-2:638088845137:log-group:/aws/lambda/felipe-test-ServerlessFunction-KyEtQReUd8FA:*",  # noqa
-                "storedBytes": 6877,
-            },
-        ],
-        "ResponseMetadata": {
-            "RequestId": "f303de04-8572-4667-8a29-6c42c0326cc9",
-            "HTTPStatusCode": 200,
-            "HTTPHeaders": {
-                "x-amzn-requestid": "f303de04-8572-4667-8a29-6c42c0326cc9",
-                "content-type": "application/x-amz-json-1.1",
-                "content-length": "476",
-                "date": "Tue, 18 Jan 2022 00:55:09 GMT",
-            },
-            "RetryAttempts": 0,
-        },
-    }
 
 
 @pytest.fixture
@@ -65,45 +34,93 @@ def f_aws_credentials():
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
-@moto.mock_ssm
-@moto.mock_logs
-def test_lambda_function(f_os_environ, f_aws_credentials, f_create_export_task):
-    ##########################################################################
-    # ARRANGE
-    ##########################################################################
-    import cloudwatch_logs_s3_archive
+def test_throw_exception_with_invalid_or_insufficient_inputs():
+    with pytest.raises((NameError, ValueError, TypeError)):
+        c = CloudWatchLogsS3Archive()  # type: ignore
+        c.check_valid_inputs()
 
-    os.environ["S3_BUCKET"] = "mybucket2"
-    os.environ["ACCOUNT_ID"] = "123412341234"
+
+@moto.mock_logs
+def test_get_a_generator_of_logs_groups():
+    # ARRANGE
     logs = boto3.client("logs")
-    logs.create_log_group(logGroupName="mock_my_log_group_name")
-    ##########################################################################
-    # ACTIONS
-    ##########################################################################
+    logs.create_log_group(logGroupName="first")
+    logs.create_log_group(logGroupName="second")
+    logs.create_log_group(logGroupName="third")
+    c = CloudWatchLogsS3Archive("bucket", 123412341234)
+    # ACT
+    log_groups = c.collect_log_groups_list()
+    # ASSERT
+    assert next(log_groups) == "first"  # type: ignore
+    assert next(log_groups) == "second"  # type: ignore
+    assert next(log_groups) == "third"  # type: ignore
+
+
+@moto.mock_ssm
+def test_get_last_export_time_from_ssm_parameter():
+    from time import time
+
+    expected = str(round(time() * 1000))
+    ssm = boto3.client("ssm")
+    ssm.put_parameter(Name="/log-exporter-last-export/first", Value=expected)
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    last_export_time = c.get_last_export_time(Name="/log-exporter-last-export/first")
+    assert last_export_time == expected
+
+
+@moto.mock_ssm
+def test_set_start_time_zero_when_parameter_does_not_exist():
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    last_export_time = c.get_last_export_time(Name="/doesnotexist")
+    assert last_export_time == "0"
+
+
+def test_set_export_time():
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    from time import time
+
+    assert pytest.approx(round(time() * 1000)) == c.set_export_time()
+
+
+@moto.mock_ssm
+def test_put_export_time():
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    put_time = 1642568042037
+    c.put_export_time(
+        put_time,
+        Name="/log-exporter-last-export/first",
+    )
+    c.get_last_export_time(Name="/log-exporter-last-export/first")
+
+
+@moto.mock_logs
+@moto.mock_ssm
+def test_create_export_tasks():
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    # ssm = boto3.client("ssm")
+    logs = boto3.client("logs")
+    logs.create_log_group(logGroupName="/log-exporter-last-export/first")
+    logs.create_log_group(logGroupName="/log-exporter-last-export/second")
+    logs.create_log_group(logGroupName="/log-exporter-last-export/third")
+    toTime = c.put_export_time(
+        1642568042037,
+        Name="/log-exporter-last-export/first",
+    )
+    fromTime = c.get_last_export_time(Name="/log-exporter-last-export/first")
+
     with mock.patch(
-        target="cloudwatch_logs_s3_archive.logs.create_export_task",
+        target="cloudwatch_logs_s3_archive.CloudWatchLogsS3Archive.logs",
         return_value={"taskId": "I am mocked via mock.patch"},
         autospec=True,
-    ) as create_export_task:
-        # logs.create_export_task() isn't implemented yet in mock_logs, so
-        # we resort to using unittest.mock.patch for this.
-        # http://docs.getmoto.org/en/latest/docs/services/logs.html
-        #
-        # patch("autospec=True"): This causes any mocks to raise an exception if a
-        # method, function, property, or attribute of the object being mocked does not
-        # exist in the original object.
-        # https://docs.python.org/3/library/unittest.mock.html#auto-speccing
-        #
-        cloudwatch_logs_s3_archive.lambda_handler(None, None)
-    ##########################################################################
-    # ASSERTIONS
-    ##########################################################################
-    assert os.getenv("S3_BUCKET")
-    assert os.getenv("S3_BUCKET") is not None
-    logger.info("call count is: {}".format(create_export_task.call_count))
-    logger.info("call_args is: {}".format(create_export_task.call_args))
-    logger.info("call_args_list is : {}".format(create_export_task.call_args_list))
-    create_export_task.assert_called_once()
+    ):
+        c.create_export_tasks(
+            "/log-exporter-last-export/first", fromTime, toTime, "s3_bucket", 123412341234
+        )
+#         target="cloudwatch_logs_s3_archive.CloudWatchLogsS3Archive.create_export_tasks",
+
+
+def test_try_catch_LimitExceededException():
+    ...
 
 
 ##############################################################################

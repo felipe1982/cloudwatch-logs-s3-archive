@@ -1,91 +1,98 @@
 """Export CloudWatch Logs to S3 every 24 hours."""
 import logging
 import os
-import time
-
+from time import time
 import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-logs = boto3.client("logs")
-ssm = boto3.client("ssm")
+# logs = boto3.client("logs")
+# ssm = boto3.client("ssm")
 
-print(f"logs is : {logs}")
-print(f"ssm is: {ssm}")
+
+class CloudWatchLogsS3Archive:
+    botocore_config = Config(retries={"max_attempts": 10, "mode": "adaptive"})
+    logs = boto3.client("logs", config=botocore_config)
+    ssm = boto3.client("ssm", config=botocore_config)
+
+    def __init__(self, s3_bucket, account_id) -> None:
+        self.s3_bucket = s3_bucket
+        self.account_id = account_id
+        self.extra_args = {}
+        self.log_groups = []
+        self.log_groups_to_export = []
+
+    def check_valid_inputs(self):
+        """Check that required inputs are present and valid"""
+        if len(self.account_id) != 12:
+            logging.error("Account Id must be valid 12-digit AWS account id")
+            raise ValueError("Account Id must be valid 12-digit AWS account id")
+
+    def collect_log_groups_list(self):
+        """Capture the names of all of the CloudWatch Log Groups"""
+        paginator = self.__class__.logs.get_paginator("describe_log_groups")
+        page_it = paginator.paginate()
+        for p in page_it:
+            return (lg["logGroupName"] for lg in p["logGroups"])  # type: ignore
+
+    def get_last_export_time(self, Name) -> str:
+        """Get time of the last export from SSM Parameter Store"""
+        try:
+            return self.__class__.ssm.get_parameter(Name=Name)["Parameter"]["Value"]
+        except (self.__class__.ssm.exceptions.ParameterNotFound, ClientError) as exc:
+            logger.warning(*exc.args)
+            if exc.response["Error"]["Code"] == "ParameterNotFound":  # type: ignore
+                return "0"
+            else:
+                raise
+
+    def set_export_time(self):
+        """Set current export time"""
+
+        return round(time() * 1000)
+
+    def put_export_time(self, put_time, Name):
+        """Put current export time to SSM Parameter Store"""
+        self.__class__.ssm.put_parameter(Name=Name, Value=str(put_time))
+
+    def create_export_tasks(
+        self, log_group_name, fromTime, toTime, s3_bucket, account_id
+    ):
+        """Create new CloudWatchLogs Export Tasks"""
+        # try:
+        response = self.__class__.logs.create_export_task(
+            logGroupName=log_group_name,
+            fromTime=int(fromTime),
+            to=toTime,
+            destination=s3_bucket,
+            destinationPrefix="{}/{}".format(account_id, log_group_name.strip("/")),
+        )
+        logger.info("✔   Task created: %s" % response["taskId"])
+        # except logs.exceptions.LimitExceededException:
+        #     """The Boto3 standard retry mode will catch throttling errors and
+        #     exceptions, and will back off and retry them for you."""
+        #     logger.warning(
+        #         "⚠   Too many concurrently running export tasks "
+        #         "(LimitExceededException); backing off and retrying..."
+        #     )
+        #     return False
+        # except Exception as e:
+        #     logger.exception(
+        #         "✖   Error exporting %s: %s",
+        #         log_group_name,
+        #         getattr(e, "message", repr(e)),
+        #     )
+
+        # ssm_response = self.__class__.ssm.put_parameter(
+        #     Name=ssm_parameter_name,
+        #     Type="String",
+        #     Value=str(export_to_time),
+        #     Overwrite=True,
+        # )
 
 
 def lambda_handler(event, context):
-    extra_args = {}
-    log_groups = []
-    log_groups_to_export = []
-
-    if "S3_BUCKET" not in os.environ:
-        logger.error("Error: S3_BUCKET environment variable not defined")
-        raise Exception  # return False
-
-    logger.debug("--> S3_BUCKET=%s" % os.environ["S3_BUCKET"])
-
-    ACCOUNT_ID = os.environ["ACCOUNT_ID"]
-    logger.debug("--> ACCOUNT_ID=%s", ACCOUNT_ID)
-
-    while True:
-        response = logs.describe_log_groups(**extra_args)
-        log_groups = log_groups + response["logGroups"]
-
-        if "nextToken" not in response:
-            break
-        extra_args["nextToken"] = response["nextToken"]
-
-    for log_group in log_groups:
-        log_groups_to_export.append(log_group["logGroupName"])
-
-    for log_group_name in log_groups_to_export:
-        ssm_parameter_name = ("/log-exporter-last-export/%s" % log_group_name).replace(
-            "//", "/"
-        )
-        try:
-            ssm_response = ssm.get_parameter(Name=ssm_parameter_name)
-            ssm_value = ssm_response["Parameter"]["Value"]
-        except ssm.exceptions.ParameterNotFound:
-            ssm_value = "0"
-
-        export_to_time = int(round(time.time() * 1000))
-
-        logger.info("--> Exporting %s to %s" % (log_group_name, os.environ["S3_BUCKET"]))
-
-        if export_to_time - int(ssm_value) < (24 * 60 * 60 * 1000):
-            # Haven't been 24hrs from the last export of this log group
-            logger.warning("    Skipped until 24hrs from last export is completed")
-            continue
-
-        try:
-            response = logs.create_export_task(
-                logGroupName=log_group_name,
-                fromTime=int(ssm_value),
-                to=export_to_time,
-                destination=os.environ["S3_BUCKET"],
-                destinationPrefix="%s/%s" % (ACCOUNT_ID, log_group_name.strip("/")),
-            )
-            logger.info("✔   Task created: %s" % response["taskId"])
-            time.sleep(5)
-
-        except logs.exceptions.LimitExceededException:
-            logger.warning(
-                "⚠   Too many concurrently running export tasks "
-                "(LimitExceededException). Aborting..."
-            )
-            return False
-
-        except Exception as e:
-            logger.exception(
-                "✖   Error exporting %s: %s"
-                % (log_group_name, getattr(e, "message", repr(e)))
-            )
-            continue
-
-        ssm_response = ssm.put_parameter(
-            Name=ssm_parameter_name,
-            Type="String",
-            Value=str(export_to_time),
-            Overwrite=True,
-        )
+    os.environ["S3_BUCKET"] = "mybucket2"
+    os.environ["ACCOUNT_ID"] = "123412341234"
