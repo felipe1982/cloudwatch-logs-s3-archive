@@ -32,7 +32,7 @@ class CloudWatchLogsS3Archive:
     def check_valid_inputs(self):
         """Check that required inputs are present and valid"""
         if len(self.account_id) != 12:
-            logging.error("Account Id must be valid 12-digit AWS account id")
+            logger.error("Account Id must be valid 12-digit AWS account id")
             raise ValueError("Account Id must be valid 12-digit AWS account id")
 
     def collect_log_groups(self):
@@ -52,7 +52,11 @@ class CloudWatchLogsS3Archive:
             return resp["Parameter"]["Value"]
 
         except (self.ssm.exceptions.ParameterNotFound, ClientError) as exc:
-            logger.warning(*exc.args)
+            logger.warning(
+                "Parameter '{}' was not found. Setting last export time to '0'".format(
+                    self.prepend_ssm_parameter_prefix(logGroupName)
+                )
+            )
             if exc.response["Error"]["Code"] == "ParameterNotFound":  # type: ignore
                 return "0"
             else:
@@ -85,7 +89,7 @@ class CloudWatchLogsS3Archive:
                 destinationPrefix="{}/{}".format(account_id, log_group_name.strip("/")),
             )
             self.put_export_time(log_group_name, toTime)
-            logger.info("✔   Task created: %s" % response["taskId"])
+            logger.info("✔   Task created: %s", response["taskId"])
         except self.logs.exceptions.LimitExceededException:
             """The Boto3 standard retry mode will catch throttling errors and
             exceptions, and will back off and retry them for you."""
@@ -99,17 +103,27 @@ class CloudWatchLogsS3Archive:
             raise
 
     def prepend_ssm_parameter_prefix(self, *args: str):
-        result = self.ssm_parameter_prefix + ''.join(args)
+        result = self.ssm_parameter_prefix + "".join(args)
         return result.replace("//", "/")
 
 
 def lambda_handler(event: dict, context: dict):
     s3_bucket = os.environ["S3_BUCKET"]
     account_id = os.environ["ACCOUNT_ID"]
+    logger.info(f"s3_bucket is {s3_bucket}")
+    logger.info(f"account_id is: {account_id}")
     c = CloudWatchLogsS3Archive(s3_bucket, account_id)
     c.check_valid_inputs()
     log_groups = c.collect_log_groups()
     for log_group_name in log_groups:
         fromTime = c.get_last_export_time(log_group_name)
         toTime = c.set_export_time()
+        logger.info("COMMAND LINE WAS:")
+        logger.info(
+            "log group name %s, from time %s, to time %s, s3_bucket %s",
+            log_group_name,
+            fromTime,
+            toTime,
+            s3_bucket,
+        )
         c.create_export_tasks(log_group_name, fromTime, toTime, s3_bucket, account_id)
