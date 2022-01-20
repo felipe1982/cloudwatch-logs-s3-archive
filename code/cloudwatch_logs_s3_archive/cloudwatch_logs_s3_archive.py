@@ -69,6 +69,7 @@ class CloudWatchLogsS3Archive:
             Name=self.prepend_ssm_parameter_prefix(logGroupName),
             Value=str(Value),
             Overwrite=True,
+            Type="String",
         )
 
     def create_export_tasks(
