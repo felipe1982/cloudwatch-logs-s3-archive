@@ -2,12 +2,14 @@
 import logging
 import os
 from time import time
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class CloudWatchLogsS3Archive:
@@ -95,7 +97,8 @@ class CloudWatchLogsS3Archive:
             )
 
     def prepend_ssm_parameter_prefix(self, *args: str):
-        return self.ssm_parameter_prefix + ''.join(args).replace("//", "/")
+        result = self.ssm_parameter_prefix + ''.join(args)
+        return result.replace("//", "/")
 
 
 def lambda_handler(event: dict, context: dict):
