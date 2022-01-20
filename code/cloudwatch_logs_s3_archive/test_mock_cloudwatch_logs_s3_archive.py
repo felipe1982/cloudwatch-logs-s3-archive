@@ -191,3 +191,13 @@ def test_ssm_put_parameter_prefx_applied_to_log_group_name():
     actual = resp["Parameter"]["Value"]
     expected = toTime
     assert pytest.approx(actual) == str(expected)
+
+
+def test_prepend_prefix_automatically_to_log_group_name():
+    from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
+
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    log_group_name = "aws/codebuild/hugo-blog/"
+    actual = c.prepend_ssm_parameter_prefix(log_group_name)
+    expected = c.ssm_parameter_prefix + log_group_name
+    assert actual == expected

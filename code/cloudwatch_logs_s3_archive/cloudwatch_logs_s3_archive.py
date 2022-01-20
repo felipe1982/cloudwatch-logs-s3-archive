@@ -94,6 +94,9 @@ class CloudWatchLogsS3Archive:
                 getattr(e, "message", repr(e)),
             )
 
+    def prepend_ssm_parameter_prefix(self, *args: str):
+        return self.ssm_parameter_prefix + ''.join(args).replace("//", "/")
+
 
 def lambda_handler(event: dict, context: dict):
     s3_bucket = os.environ["S3_BUCKET"]
