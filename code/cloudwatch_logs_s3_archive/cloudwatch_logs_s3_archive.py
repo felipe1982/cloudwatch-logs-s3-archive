@@ -43,7 +43,7 @@ class CloudWatchLogsS3Archive:
         """Get time of the last export from SSM Parameter Store"""
         try:
             resp = self.ssm.get_parameter(
-                Name=f"{self.ssm_parameter_prefix}{logGroupName}"
+                Name=self.prepend_ssm_parameter_prefix(logGroupName)
             )
             return resp["Parameter"]["Value"]
 
@@ -62,7 +62,7 @@ class CloudWatchLogsS3Archive:
     def put_export_time(self, logGroupName, Value):
         """Put current export time to SSM Parameter Store"""
         self.ssm.put_parameter(
-            Name=f"{self.ssm_parameter_prefix}{logGroupName}",
+            Name=self.prepend_ssm_parameter_prefix(logGroupName),
             Value=str(Value),
             Overwrite=True,
         )
