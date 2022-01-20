@@ -21,7 +21,7 @@ class CloudWatchLogsS3Archive:
         self.log_groups_to_export = []
         self.logs = boto3.client("logs", config=self.botocore_config)
         self.ssm = boto3.client("ssm", config=self.botocore_config)
-        self.ssm_parameter_prefix = '/log-exporter-last-export/'
+        self.ssm_parameter_prefix = "/log-exporter-last-export/"
 
     def check_valid_inputs(self):
         """Check that required inputs are present and valid"""
@@ -37,10 +37,14 @@ class CloudWatchLogsS3Archive:
             for lg in p["logGroups"]:
                 yield lg["logGroupName"]  # type: ignore
 
-    def get_last_export_time(self, Name) -> str:
+    def get_last_export_time(self, logGroupName) -> str:
         """Get time of the last export from SSM Parameter Store"""
         try:
-            return self.ssm.get_parameter(Name=Name)["Parameter"]["Value"]  # TODO should use Prefix
+            resp = self.ssm.get_parameter(
+                Name=f"{self.ssm_parameter_prefix}{logGroupName}"
+            )
+            return resp["Parameter"]["Value"]
+
         except (self.ssm.exceptions.ParameterNotFound, ClientError) as exc:
             logger.warning(*exc.args)
             if exc.response["Error"]["Code"] == "ParameterNotFound":  # type: ignore
@@ -48,13 +52,18 @@ class CloudWatchLogsS3Archive:
             else:
                 raise
 
-    def set_export_time(self):
+    @staticmethod
+    def set_export_time():
         """Set current export time"""
         return round(time() * 1000)
 
-    def put_export_time(self, put_time, Name):
+    def put_export_time(self, logGroupName, Value):
         """Put current export time to SSM Parameter Store"""
-        self.ssm.put_parameter(Name=Name, Value=str(put_time), Overwrite=True)  # TODO should use Prefix
+        self.ssm.put_parameter(
+            Name=f"{self.ssm_parameter_prefix}{logGroupName}",
+            Value=str(Value),
+            Overwrite=True,
+        )
 
     def create_export_tasks(
         self, log_group_name, fromTime, toTime, s3_bucket, account_id

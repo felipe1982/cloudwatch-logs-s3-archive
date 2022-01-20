@@ -61,7 +61,7 @@ def test_get_last_export_time_from_ssm_parameter():
     ssm = boto3.client("ssm")
     ssm.put_parameter(Name="/log-exporter-last-export/first", Value=expected)
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    last_export_time = c.get_last_export_time(Name="first")
+    last_export_time = c.get_last_export_time("first")
     assert last_export_time == expected
 
 
@@ -70,7 +70,7 @@ def test_set_start_time_zero_when_parameter_does_not_exist():
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    last_export_time = c.get_last_export_time(Name="/doesnotexist")
+    last_export_time = c.get_last_export_time("/doesnotexist")
     assert last_export_time == "0"
 
 
@@ -90,8 +90,10 @@ def test_put_export_time():
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
     ssm = boto3.client("ssm")
     put_time = 1642568042037
-    c.put_export_time(put_time, Name="first")
-    assert ssm.get_parameter(Name="/log-exporter-last-export/first") == str(1642568042037)
+    c.put_export_time("first", put_time)
+    resp = ssm.get_parameter(Name="/log-exporter-last-export/first")
+    actual = resp["Parameter"]["Value"]
+    assert actual == str(put_time)
 
 
 @moto.mock_logs
@@ -104,10 +106,10 @@ def test_create_export_tasks():
     s3_bucket = "s3_bucket"
     account_id = 123412341234
     toTime = c.put_export_time(
+        "first",
         1642568042037,
-        Name="first",
     )
-    fromTime = c.get_last_export_time(Name="first")
+    fromTime = c.get_last_export_time("first")
     c.logs.create_export_task = mock.Mock(
         return_value={"taskId": "I am mocked via mock.Mock"}
     )
@@ -132,6 +134,7 @@ def test_try_catch_LimitExceededException():
 @moto.mock_ssm
 def test_lambda_handler_function_from_import():
     from cloudwatch_logs_s3_archive import lambda_handler
+
     # import cloudwatch_logs_s3_archive
 
     event = context = {}
@@ -157,15 +160,34 @@ def test_lambda_handler_function_import():
 
 @moto.mock_logs
 @moto.mock_ssm
-def test_ssm_parameter_prefx_applied_to_log_group_name():
+def test_ssm_get_parameter_prefx_applied_to_log_group_name():
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
-    log_group_name = "first"
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    c.logs.create_log_group(logGroupName=log_group_name)
-    c.put_export_time(
-        c.set_export_time, Name=f"/log-exporter-last-export/{log_group_name}"
-    )
+    ssm = boto3.client('ssm')
+    logs = boto3.client('logs')
+    log_group_name = "first"
+    logs.create_log_group(logGroupName=log_group_name)
+    toTime = c.set_export_time()
+    ssm.put_parameter(Name=f"/log-exporter-last-export/{log_group_name}", Value=str(toTime))
     actual = c.get_last_export_time(log_group_name)
-    expected = f"/log-exporter-last-export/{log_group_name}"
-    assert actual == expected
+    expected = toTime
+    assert pytest.approx(actual) == str(expected)
+
+
+@moto.mock_logs
+@moto.mock_ssm
+def test_ssm_put_parameter_prefx_applied_to_log_group_name():
+    from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
+
+    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+    ssm = boto3.client('ssm')
+    logs = boto3.client('logs')
+    log_group_name = "first"
+    logs.create_log_group(logGroupName=log_group_name)
+    toTime = c.set_export_time()
+    c.put_export_time(log_group_name, toTime)
+    resp = ssm.get_parameter(Name=f"/log-exporter-last-export/{log_group_name}")
+    actual = resp["Parameter"]["Value"]
+    expected = toTime
+    assert pytest.approx(actual) == str(expected)
