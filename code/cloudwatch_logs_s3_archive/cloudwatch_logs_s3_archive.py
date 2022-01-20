@@ -1,15 +1,19 @@
 """Export CloudWatch Logs to S3 every 24 hours."""
-import logging
+# import logging
 import os
 from time import time
 
 import boto3
+
+from aws_lambda_powertools.logging import Logger
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = Logger(level="INFO")
+# logging.basicConfig(level=logging.INFO)
+
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)
 
 
 class CloudWatchLogsS3Archive:

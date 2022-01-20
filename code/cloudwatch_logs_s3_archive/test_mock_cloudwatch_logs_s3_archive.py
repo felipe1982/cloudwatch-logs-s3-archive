@@ -1,5 +1,4 @@
 """Test Cloud Watch Logs S3 Archive Python Lambda Function"""
-import logging
 import os
 from unittest import mock
 
@@ -7,8 +6,6 @@ import boto3
 import moto
 import pytest
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.fixture
