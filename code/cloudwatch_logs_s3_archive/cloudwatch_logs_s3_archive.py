@@ -94,12 +94,9 @@ class CloudWatchLogsS3Archive:
                 "(LimitExceededException); backing off and retrying..."
             )
             # return False
-        except Exception as e:
-            logger.exception(
-                "✖   Error exporting %s: %s",
-                log_group_name,
-                getattr(e, "message", repr(e)),
-            )
+        except Exception:
+            logger.exception("✖   Error exporting '%s'", log_group_name)
+            raise
 
     def prepend_ssm_parameter_prefix(self, *args: str):
         result = self.ssm_parameter_prefix + ''.join(args)
