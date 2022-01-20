@@ -25,13 +25,13 @@ def f_aws_credentials(autouse=True):
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def logs():
     with moto.mock_logs():
         yield boto3.client("logs")
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def ssm():
     with moto.mock_ssm():
         yield boto3.client("ssm")
@@ -131,33 +131,11 @@ def test_create_export_tasks():
     )
 
 
+@pytest.mark.xfail  # xfail: expected to fail
 def test_try_catch_LimitExceededException():
-    ...
-
-
-@moto.mock_s3
-def test_lambda_handler_function_from_import(ssm, logs):
-    from cloudwatch_logs_s3_archive import lambda_handler
-
-    # import cloudwatch_logs_s3_archive
-
-    event = context = {}
-    os.environ["S3_BUCKET"] = "mybucket"
-    os.environ["ACCOUNT_ID"] = "123412341234"
-
-    lambda_handler(event, context)
-
-
-@moto.mock_s3
-def test_lambda_handler_function_import(ssm, logs):
-    # from cloudwatch_logs_s3_archive import lambda_handler
-    import cloudwatch_logs_s3_archive
-
-    event = context = {}
-    os.environ["S3_BUCKET"] = "mybucket"
-    os.environ["ACCOUNT_ID"] = "123412341234"
-
-    cloudwatch_logs_s3_archive.lambda_handler(event, context)
+    """Test boto3 client retries automatically when set to "standard" mode, and
+    when exception is of type "LimitExceededException"
+    """
 
 
 def test_ssm_get_parameter_prefx_applied_to_log_group_name(ssm, logs):
@@ -197,3 +175,32 @@ def test_prepend_prefix_automatically_to_log_group_name():
     actual = c.prepend_ssm_parameter_prefix(log_group_name)
     expected = c.ssm_parameter_prefix + "aws/codebuild/hugo-blog/"
     assert actual == expected
+
+
+@moto.mock_s3
+@moto.mock_ssm
+@moto.mock_logs
+def test_lambda_handler_function_from_import():
+    from cloudwatch_logs_s3_archive import lambda_handler
+
+    # import cloudwatch_logs_s3_archive
+
+    event = context = {}
+    os.environ["S3_BUCKET"] = "mybucket"
+    os.environ["ACCOUNT_ID"] = "123412341234"
+
+    lambda_handler(event, context)
+
+
+@moto.mock_s3
+@moto.mock_ssm
+@moto.mock_logs
+def test_lambda_handler_function_import():
+    # from cloudwatch_logs_s3_archive import lambda_handler
+    import cloudwatch_logs_s3_archive
+
+    event = context = {}
+    os.environ["S3_BUCKET"] = "mybucket"
+    os.environ["ACCOUNT_ID"] = "123412341234"
+
+    cloudwatch_logs_s3_archive.lambda_handler(event, context)
