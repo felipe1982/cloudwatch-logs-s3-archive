@@ -21,6 +21,7 @@ class CloudWatchLogsS3Archive:
         self.log_groups_to_export = []
         self.logs = boto3.client("logs", config=self.botocore_config)
         self.ssm = boto3.client("ssm", config=self.botocore_config)
+        self.ssm_parameter_prefix = '/log-exporter-last-export/'
 
     def check_valid_inputs(self):
         """Check that required inputs are present and valid"""
@@ -34,12 +35,12 @@ class CloudWatchLogsS3Archive:
         page_it = paginator.paginate()
         for p in page_it:
             for lg in p["logGroups"]:
-                yield lg["logGroupName"]
+                yield lg["logGroupName"]  # type: ignore
 
     def get_last_export_time(self, Name) -> str:
         """Get time of the last export from SSM Parameter Store"""
         try:
-            return self.ssm.get_parameter(Name=Name)["Parameter"]["Value"]
+            return self.ssm.get_parameter(Name=Name)["Parameter"]["Value"]  # TODO should use Prefix
         except (self.ssm.exceptions.ParameterNotFound, ClientError) as exc:
             logger.warning(*exc.args)
             if exc.response["Error"]["Code"] == "ParameterNotFound":  # type: ignore
@@ -53,7 +54,7 @@ class CloudWatchLogsS3Archive:
 
     def put_export_time(self, put_time, Name):
         """Put current export time to SSM Parameter Store"""
-        self.ssm.put_parameter(Name=Name, Value=str(put_time), Overwrite=True)
+        self.ssm.put_parameter(Name=Name, Value=str(put_time), Overwrite=True)  # TODO should use Prefix
 
     def create_export_tasks(
         self, log_group_name, fromTime, toTime, s3_bucket, account_id
@@ -67,6 +68,7 @@ class CloudWatchLogsS3Archive:
                 destination=s3_bucket,
                 destinationPrefix="{}/{}".format(account_id, log_group_name.strip("/")),
             )
+            self.put_export_time(log_group_name, toTime)
             logger.info("✔   Task created: %s" % response["taskId"])
         except self.logs.exceptions.LimitExceededException:
             """The Boto3 standard retry mode will catch throttling errors and
@@ -84,7 +86,7 @@ class CloudWatchLogsS3Archive:
             )
 
 
-def lambda_handler(event, context):
+def lambda_handler(event: dict, context: dict):
     s3_bucket = os.environ["S3_BUCKET"]
     account_id = os.environ["ACCOUNT_ID"]
     c = CloudWatchLogsS3Archive(s3_bucket, account_id)
@@ -94,4 +96,3 @@ def lambda_handler(event, context):
         fromTime = c.get_last_export_time(log_group_name)
         toTime = c.set_export_time()
         c.create_export_tasks(log_group_name, fromTime, toTime, s3_bucket, account_id)
-        c.put_export_time(log_group_name, toTime)
