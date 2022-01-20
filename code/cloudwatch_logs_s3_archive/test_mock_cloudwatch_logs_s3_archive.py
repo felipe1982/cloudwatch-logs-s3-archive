@@ -36,72 +36,72 @@ def ssm():
         yield boto3.client("ssm")
 
 
-def test_throw_TypeError_exception_with_invalid_or_insufficient_inputs():
+@pytest.fixture(autouse=False, scope="function")
+def instance():
+    return CloudWatchLogsS3Archive("bucket", "123412341234")
+
+
+def test_throw_TypeError_exception_with_invalid_or_insufficient_inputs(instance):
     with pytest.raises((TypeError)):
-        c = CloudWatchLogsS3Archive()  # type: ignore
-        c.check_valid_inputs()
+        instance = CloudWatchLogsS3Archive()  # type: ignore
+        instance.check_valid_inputs()
 
 
-def test_get_a_generator_of_logs_groups(logs):
+def test_get_a_generator_of_logs_groups(logs, instance):
     # ARRANGE
     logs.create_log_group(logGroupName="first")
     logs.create_log_group(logGroupName="second")
     logs.create_log_group(logGroupName="third")
-    c = CloudWatchLogsS3Archive("bucket", 123412341234)
+    instance = CloudWatchLogsS3Archive("bucket", 123412341234)
     # ACT
-    log_groups = c.collect_log_groups()
+    log_groups = instance.collect_log_groups()
     # ASSERT
     assert next(log_groups) == "first"  # type: ignore
     assert next(log_groups) == "second"  # type: ignore
     assert next(log_groups) == "third"  # type: ignore
 
 
-def test_get_last_export_time_from_ssm_parameter(ssm):
+def test_get_last_export_time_from_ssm_parameter(ssm, instance):
     expected = str(round(time() * 1000))
     ssm.put_parameter(Name="/log-exporter-last-export/first", Value=expected)
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    last_export_time = c.get_last_export_time("first")
+    last_export_time = instance.get_last_export_time("first")
     assert last_export_time == expected
 
 
 @moto.mock_ssm
-def test_set_start_time_zero_when_parameter_does_not_exist():
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    last_export_time = c.get_last_export_time("/doesnotexist")
+def test_set_start_time_zero_when_parameter_does_not_exist(instance):
+    last_export_time = instance.get_last_export_time("/doesnotexist")
     assert last_export_time == "0"
 
 
-def test_set_export_time():
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    assert pytest.approx(round(time() * 1000)) == c.set_export_time()
+def test_set_export_time(instance):
+    assert pytest.approx(round(time() * 1000)) == instance.set_export_time()
 
 
-def test_put_export_time(ssm):
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+def test_put_export_time(ssm, instance):
     put_time = 1642568042037
-    c.put_export_time("first", put_time)
+    instance.put_export_time("first", put_time)
     resp = ssm.get_parameter(Name="/log-exporter-last-export/first")
     actual = resp["Parameter"]["Value"]
     assert actual == str(put_time)
 
 
-def test_create_export_tasks(ssm, logs):
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+def test_create_export_tasks(ssm, logs, instance):
     log_group_name = "first"
     s3_bucket = "s3_bucket"
     account_id = 123412341234
-    toTime = c.put_export_time(
+    toTime = instance.put_export_time(
         "first",
         1642568042037,
     )
-    fromTime = c.get_last_export_time("first")
-    c.logs.create_export_task = mock.Mock(
+    fromTime = instance.get_last_export_time("first")
+    instance.logs.create_export_task = mock.Mock(
         return_value={"taskId": "I am mocked via mock.Mock"}
     )
-    c.create_export_tasks("first", fromTime, toTime, "s3_bucket", 123412341234)
-    assert c.logs.create_export_task.called
-    c.logs.create_export_task.assert_called
-    c.logs.create_export_task.assert_called_with(
+    instance.create_export_tasks("first", fromTime, toTime, "s3_bucket", 123412341234)
+    assert instance.logs.create_export_task.called
+    instance.logs.create_export_task.assert_called
+    instance.logs.create_export_task.assert_called_with(
         logGroupName=log_group_name,
         fromTime=int(fromTime),
         to=toTime,
@@ -117,36 +117,33 @@ def test_try_catch_LimitExceededException():
     """
 
 
-def test_ssm_get_parameter_prefx_applied_to_log_group_name(ssm, logs):
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+def test_ssm_get_parameter_prefx_applied_to_log_group_name(ssm, logs, instance):
     log_group_name = "fourth"
     logs.create_log_group(logGroupName=log_group_name)
-    toTime = c.set_export_time()
+    toTime = instance.set_export_time()
     ssm.put_parameter(
         Name=f"/log-exporter-last-export/{log_group_name}", Value=str(toTime)
     )
-    actual = c.get_last_export_time(log_group_name)
+    actual = instance.get_last_export_time(log_group_name)
     expected = toTime
     assert pytest.approx(actual) == str(expected)
 
 
-def test_ssm_put_parameter_prefx_applied_to_log_group_name(ssm, logs):
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+def test_ssm_put_parameter_prefx_applied_to_log_group_name(ssm, logs, instance):
     log_group_name = "fifth"
     logs.create_log_group(logGroupName=log_group_name)
-    toTime = c.set_export_time()
-    c.put_export_time(log_group_name, toTime)
+    toTime = instance.set_export_time()
+    instance.put_export_time(log_group_name, toTime)
     resp = ssm.get_parameter(Name=f"/log-exporter-last-export/{log_group_name}")
     actual = resp["Parameter"]["Value"]
     expected = toTime
     assert pytest.approx(actual) == str(expected)
 
 
-def test_prepend_prefix_automatically_to_log_group_name():
-    c = CloudWatchLogsS3Archive("bucket", "123412341234")
+def test_prepend_prefix_automatically_to_log_group_name(instance):
     log_group_name = "/aws/codebuild/hugo-blog/"
-    actual = c.prepend_ssm_parameter_prefix(log_group_name)
-    expected = c.ssm_parameter_prefix + "aws/codebuild/hugo-blog/"
+    actual = instance._prepend_ssm_parameter_prefix(log_group_name)
+    expected = instance.ssm_parameter_prefix + "aws/codebuild/hugo-blog/"
     assert actual == expected
 
 

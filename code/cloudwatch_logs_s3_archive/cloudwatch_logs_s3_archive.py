@@ -47,14 +47,14 @@ class CloudWatchLogsS3Archive:
         """Get time of the last export from SSM Parameter Store"""
         try:
             resp = self.ssm.get_parameter(
-                Name=self.prepend_ssm_parameter_prefix(logGroupName)
+                Name=self._prepend_ssm_parameter_prefix(logGroupName)
             )
             return resp["Parameter"]["Value"]
 
         except (self.ssm.exceptions.ParameterNotFound, ClientError) as exc:
             logger.warning(
                 "Parameter '{}' was not found. Setting last export time to '0'".format(
-                    self.prepend_ssm_parameter_prefix(logGroupName)
+                    self._prepend_ssm_parameter_prefix(logGroupName)
                 )
             )
             if exc.response["Error"]["Code"] == "ParameterNotFound":  # type: ignore
@@ -70,7 +70,7 @@ class CloudWatchLogsS3Archive:
     def put_export_time(self, logGroupName, Value):
         """Put current export time to SSM Parameter Store"""
         self.ssm.put_parameter(
-            Name=self.prepend_ssm_parameter_prefix(logGroupName),
+            Name=self._prepend_ssm_parameter_prefix(logGroupName),
             Value=str(Value),
             Overwrite=True,
             Type="String",
@@ -102,7 +102,7 @@ class CloudWatchLogsS3Archive:
             logger.exception("✖   Error exporting '%s'", log_group_name)
             raise
 
-    def prepend_ssm_parameter_prefix(self, *args: str):
+    def _prepend_ssm_parameter_prefix(self, *args: str):
         result = self.ssm_parameter_prefix + "".join(args)
         return result.replace("//", "/")
 
