@@ -25,6 +25,18 @@ def f_aws_credentials(autouse=True):
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
+@pytest.fixture(scope="function")
+def logs():
+    with moto.mock_logs():
+        yield boto3.client("logs")
+
+
+@pytest.fixture(scope="function")
+def ssm():
+    with moto.mock_ssm():
+        yield boto3.client("ssm")
+
+
 def test_throw_TypeError_exception_with_invalid_or_insufficient_inputs():
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
@@ -33,12 +45,10 @@ def test_throw_TypeError_exception_with_invalid_or_insufficient_inputs():
         c.check_valid_inputs()
 
 
-@moto.mock_logs
-def test_get_a_generator_of_logs_groups():
+def test_get_a_generator_of_logs_groups(logs):
     # ARRANGE
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
-    logs = boto3.client("logs")
     logs.create_log_group(logGroupName="first")
     logs.create_log_group(logGroupName="second")
     logs.create_log_group(logGroupName="third")
@@ -51,14 +61,12 @@ def test_get_a_generator_of_logs_groups():
     assert next(log_groups) == "third"  # type: ignore
 
 
-@moto.mock_ssm
-def test_get_last_export_time_from_ssm_parameter():
+def test_get_last_export_time_from_ssm_parameter(ssm):
     from time import time
 
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     expected = str(round(time() * 1000))
-    ssm = boto3.client("ssm")
     ssm.put_parameter(Name="/log-exporter-last-export/first", Value=expected)
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
     last_export_time = c.get_last_export_time("first")
@@ -83,12 +91,10 @@ def test_set_export_time():
     assert pytest.approx(round(time() * 1000)) == c.set_export_time()
 
 
-@moto.mock_ssm
-def test_put_export_time():
+def test_put_export_time(ssm):
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    ssm = boto3.client("ssm")
     put_time = 1642568042037
     c.put_export_time("first", put_time)
     resp = ssm.get_parameter(Name="/log-exporter-last-export/first")
@@ -129,10 +135,8 @@ def test_try_catch_LimitExceededException():
     ...
 
 
-@moto.mock_logs
 @moto.mock_s3
-@moto.mock_ssm
-def test_lambda_handler_function_from_import():
+def test_lambda_handler_function_from_import(ssm, logs):
     from cloudwatch_logs_s3_archive import lambda_handler
 
     # import cloudwatch_logs_s3_archive
@@ -144,10 +148,8 @@ def test_lambda_handler_function_from_import():
     lambda_handler(event, context)
 
 
-@moto.mock_logs
 @moto.mock_s3
-@moto.mock_ssm
-def test_lambda_handler_function_import():
+def test_lambda_handler_function_import(ssm, logs):
     # from cloudwatch_logs_s3_archive import lambda_handler
     import cloudwatch_logs_s3_archive
 
@@ -158,32 +160,26 @@ def test_lambda_handler_function_import():
     cloudwatch_logs_s3_archive.lambda_handler(event, context)
 
 
-@moto.mock_logs
-@moto.mock_ssm
-def test_ssm_get_parameter_prefx_applied_to_log_group_name():
+def test_ssm_get_parameter_prefx_applied_to_log_group_name(ssm, logs):
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    ssm = boto3.client('ssm')
-    logs = boto3.client('logs')
-    log_group_name = "first"
+    log_group_name = "fourth"
     logs.create_log_group(logGroupName=log_group_name)
     toTime = c.set_export_time()
-    ssm.put_parameter(Name=f"/log-exporter-last-export/{log_group_name}", Value=str(toTime))
+    ssm.put_parameter(
+        Name=f"/log-exporter-last-export/{log_group_name}", Value=str(toTime)
+    )
     actual = c.get_last_export_time(log_group_name)
     expected = toTime
     assert pytest.approx(actual) == str(expected)
 
 
-@moto.mock_logs
-@moto.mock_ssm
-def test_ssm_put_parameter_prefx_applied_to_log_group_name():
+def test_ssm_put_parameter_prefx_applied_to_log_group_name(ssm, logs):
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    ssm = boto3.client('ssm')
-    logs = boto3.client('logs')
-    log_group_name = "first"
+    log_group_name = "fifth"
     logs.create_log_group(logGroupName=log_group_name)
     toTime = c.set_export_time()
     c.put_export_time(log_group_name, toTime)
@@ -197,7 +193,7 @@ def test_prepend_prefix_automatically_to_log_group_name():
     from cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     c = CloudWatchLogsS3Archive("bucket", "123412341234")
-    log_group_name = "aws/codebuild/hugo-blog/"
+    log_group_name = "/aws/codebuild/hugo-blog/"
     actual = c.prepend_ssm_parameter_prefix(log_group_name)
-    expected = c.ssm_parameter_prefix + log_group_name
+    expected = c.ssm_parameter_prefix + "aws/codebuild/hugo-blog/"
     assert actual == expected
