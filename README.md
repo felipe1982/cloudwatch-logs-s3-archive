@@ -13,12 +13,16 @@ pip install pytest
 pytest code/cloudwatch_logs_s3_archive/test_mock_cloudwatch_logs_s3_archive.py`
 ```
 
+## Lambda Environment Variables
+
 This requires 2 environent variables to be configured on Lambda FUnction:
 
 1. `S3_BUCKET`: name of s3 bucket
 2. `ACCOUNT_ID`: 12-digit AWS account id
 
 ## S3 Bucket Policies
+
+### Same Account
 
 Use this policy for buckets in the same account as the logs
 
@@ -43,6 +47,8 @@ Use this policy for buckets in the same account as the logs
     ]
 }
 ```
+
+### Different Account
 
 Use this policy for buckets in a different account from the logs:
 
