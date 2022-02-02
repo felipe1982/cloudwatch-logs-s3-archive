@@ -25,8 +25,6 @@ class CloudWatchLogsS3Archive:
         self.extra_args = {}
         self.log_groups = []
         self.log_groups_to_export = []
-        # self.logs = boto3.client("logs", region_name="us-east-1")
-        # self.ssm = boto3.client("ssm", region_name="us-east-1")
         self.logs = boto3.client("logs")
         self.ssm = boto3.client("ssm")
         self.ssm_parameter_prefix = "/log-exporter-last-export/"
