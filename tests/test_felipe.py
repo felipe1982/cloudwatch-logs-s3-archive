@@ -29,8 +29,6 @@ def ssm(f_aws_credentials):
     with moto.mock_ssm():
         yield boto3.client("ssm")
 
-@moto.mock_logs
-@moto.mock_s3
 @pytest.fixture
 def instance(logs, ssm):
     from src.cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
@@ -41,8 +39,6 @@ def test_describe_log_groups(logs, ssm):
     logs.create_log_group(logGroupName="felipe/log/group")
     print(logs.describe_log_groups())
 
-@moto.mock_logs
-@moto.mock_s3
 def test_get_a_generator_of_logs_groups(instance, logs, ssm):
     # ARRANGE
     logs.create_log_group(logGroupName="first")
