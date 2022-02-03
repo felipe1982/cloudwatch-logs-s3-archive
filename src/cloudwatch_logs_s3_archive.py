@@ -77,7 +77,12 @@ class CloudWatchLogsS3Archive:
         )
 
     def create_export_tasks(
-        self, log_group_name, fromTime, toTime, s3_bucket, account_id
+        self,
+        log_group_name,
+        fromTime,
+        toTime,
+        s3_bucket,
+        account_id,
     ):
         """Create new CloudWatchLogs Export Tasks"""
         try:
