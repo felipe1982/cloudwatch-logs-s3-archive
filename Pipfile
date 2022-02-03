@@ -12,7 +12,7 @@ pytest-cov = "*"
 aws-lambda-powertools = "*"
 pyyaml = "*"
 flake8 = "*"
-black = "*"
+black = "<=21.12b0"
 
 [dev-packages]
 
