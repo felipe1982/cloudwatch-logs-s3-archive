@@ -17,7 +17,7 @@ Resources:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       Description: Archive CloudWatch Logs to S3 every day.
-      CodeUri: code/cloudwatch_logs_s3_archive
+      CodeUri: src/
       Handler: cloudwatch_logs_s3_archive.lambda_handler
       MemorySize: 512
       Runtime: python3.8
