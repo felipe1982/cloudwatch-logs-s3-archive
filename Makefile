@@ -6,8 +6,9 @@ deploy:
 	--stack-name cloudwatch-logs-s3-archive \
 	--capabilities CAPABILITY_IAM \
 	--parameter-overrides CloudWatchLogsArchiveBucket=$(BUCKET)
-
+delete:
+	sam delete --stack-name cloudwatch-logs-s3-archive
 test:
-	pytest code/*/test_*.py
+	pytest tests/test_*.py
 test-verbose:
-	pytest --capture=no --verbose --log-cli-level=INFO code/*/test_*.py
+	pytest --capture=no --verbose --log-cli-level=INFO tests/test_*.py
