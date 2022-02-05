@@ -99,29 +99,34 @@ def test_put_export_time(ssm, instance):
 
 
 def test_create_export_tasks(ssm, logs, instance):
-    log_group_name = "first"
+    log_group_name = "/aws/felipe/loggroup"
     s3_bucket = "s3_bucket"
     account_id = 123412341234
-    toTime = instance.put_export_time(
-        "first",
-        1642568042037,
-    )
-    fromTime = instance.get_last_export_time("first")
-    with mock.patch.object( instance.logs, 'create_export_task', return_value={"taskId": "I am mocked via mock.Mock"} ):
+    fromTime = instance.get_last_export_time(log_group_name)
+    toTime = instance.set_export_time()
+    with mock.patch.object(
+        instance.logs,
+        "create_export_task",
+        return_value={"taskId": "I am mocked via mock.Mock"},
+    ):
         instance.create_export_tasks(
-            "/log-exporter-last-export/first", fromTime, toTime, "s3_bucket", 123412341234
+            log_group_name,
+            fromTime,
+            toTime,
+            "s3_bucket",
+            123412341234,
         )
-        # assert instance.logs.create_export_task.called
-    # instance.create_export_tasks("first", fromTime, toTime, "s3_bucket", 123412341234)
-        assert instance.logs.create_export_task.called
-        instance.logs.create_export_task.assert_called
-    instance.logs.create_export_task.assert_called_with(
-        logGroupName=log_group_name,
-        fromTime=int(fromTime),
-        to=toTime,
-        destination=s3_bucket,
-        destinationPrefix="{}/{}".format(account_id, log_group_name.strip("/")),
-    )
+        instance.logs.create_export_task.assert_called()
+        print(instance.logs.create_export_task.call_args)
+        m = mock.MagicMock()
+        m
+        instance.logs.create_export_task.assert_called_with(
+            logGroupName=log_group_name,
+            fromTime=int(fromTime),
+            to=int(toTime),
+            destination=s3_bucket,
+            destinationPrefix="{}/{}".format(account_id, log_group_name.strip("/")),
+        )
 
 
 def test_ssm_get_parameter_prefx_applied_to_log_group_name(ssm, logs, instance):
