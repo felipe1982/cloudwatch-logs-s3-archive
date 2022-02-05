@@ -204,4 +204,3 @@ def test_lambda_handler_function_import_bad_account_id(
 
     with pytest.raises(ValueError):
         src.cloudwatch_logs_s3_archive.lambda_handler(event, context)
-
