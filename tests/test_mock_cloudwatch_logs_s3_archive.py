@@ -154,15 +154,25 @@ def test_prepend_prefix_automatically_to_log_group_name(instance):
     assert actual == expected
 
 
-@pytest.mark.skip
-def test_lambda_handler_function_from_import(ssm, logs):
-    from cloudwatch_logs_s3_archive import lambda_handler
-
-    # import cloudwatch_logs_s3_archive
+def test_lambda_handler_function_from_import(ssm, logs, cwlog_resources, s3_resources):
+    from src.cloudwatch_logs_s3_archive import lambda_handler
 
     event = context = {}
-    os.environ["S3_BUCKET"] = "mybucket"
+    os.environ["S3_BUCKET"] = s3_resources
     os.environ["ACCOUNT_ID"] = "123412341234"
+
+    lambda_handler(event, context)
+
+
+def test_lambda_handler_function_import(ssm, logs, cwlog_resources, s3_resources):
+    import src.cloudwatch_logs_s3_archive
+
+    event = context = {}
+    os.environ["S3_BUCKET"] = s3_resources
+    os.environ["ACCOUNT_ID"] = "123412341234"
+
+    src.cloudwatch_logs_s3_archive.lambda_handler(event, context)
+
 
 def test_lambda_handler_function_from_import_bad_account_id(
     ssm, logs, cwlog_resources, s3_resources
