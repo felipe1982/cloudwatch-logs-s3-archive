@@ -117,9 +117,6 @@ def test_create_export_tasks(ssm, logs, instance):
             123412341234,
         )
         instance.logs.create_export_task.assert_called()
-        print(instance.logs.create_export_task.call_args)
-        m = mock.MagicMock()
-        m
         instance.logs.create_export_task.assert_called_with(
             logGroupName=log_group_name,
             fromTime=int(fromTime),
