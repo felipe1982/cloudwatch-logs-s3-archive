@@ -15,7 +15,8 @@ def f_aws_credentials():
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
     os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    # cannot use us-east-1 with s3.create_bucket LocationConstraint
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
 
 
 @pytest.fixture
@@ -31,15 +32,32 @@ def ssm(f_aws_credentials):
 
 
 @pytest.fixture
+def s3(f_aws_credentials):
+    with moto.mock_s3():
+        yield boto3.client("s3")
+
+
+@pytest.fixture
 def instance(logs, ssm):
     from src.cloudwatch_logs_s3_archive import CloudWatchLogsS3Archive
 
     return CloudWatchLogsS3Archive("bucket", "123412341234")
 
 
-def test_describe_log_groups(logs, ssm):
-    logs.create_log_group(logGroupName="felipe/log/group")
-    print(logs.describe_log_groups())
+@pytest.fixture
+def cwlog_resources(logs):
+    logs.create_log_group(logGroupName="/moto/test/log/group")
+
+
+@pytest.fixture
+def s3_resources(s3):
+    bucket = "moto_bucket"
+    region = os.environ["AWS_DEFAULT_REGION"]
+    s3.create_bucket(
+        Bucket=bucket,
+        CreateBucketConfiguration={"LocationConstraint": region},
+    )
+    return bucket
 
 
 def test_get_a_generator_of_logs_groups(instance, logs, ssm):
