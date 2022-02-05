@@ -167,20 +167,16 @@ def test_lambda_handler_function_from_import(ssm, logs):
     lambda_handler(event, context)
 
 
-@pytest.mark.skip
-def test_lambda_handler_function_import(ssm, logs):
+def test_lambda_handler_function_import_bad_account_id(
+    ssm, logs, cwlog_resources, s3_resources
+):
     # from cloudwatch_logs_s3_archive import lambda_handler
-    import cloudwatch_logs_s3_archive
+    import src.cloudwatch_logs_s3_archive
 
     event = context = {}
-    os.environ["S3_BUCKET"] = "mybucket"
-    os.environ["ACCOUNT_ID"] = "123412341234"
+    os.environ["S3_BUCKET"] = s3_resources
+    os.environ["ACCOUNT_ID"] = "1"
 
-    cloudwatch_logs_s3_archive.lambda_handler(event, context)
+    with pytest.raises(ValueError):
+        src.cloudwatch_logs_s3_archive.lambda_handler(event, context)
 
-
-@pytest.mark.skip
-def test_try_catch_LimitExceededException():
-    """Test boto3 client retries automatically when set to "standard" mode, and
-    when exception is of type "LimitExceededException"
-    """
