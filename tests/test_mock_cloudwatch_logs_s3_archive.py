@@ -107,6 +107,8 @@ def test_create_export_tasks(ssm, logs, instance):
     with mock.patch.object(
         instance.logs,
         "create_export_task",
+        spec_set=True,
+        autospec=True,
         return_value={"taskId": "I am mocked via mock.Mock"},
     ):
         instance.create_export_tasks(
