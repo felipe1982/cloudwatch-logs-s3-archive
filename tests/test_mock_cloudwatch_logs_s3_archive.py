@@ -89,14 +89,14 @@ def test_create_export_tasks(ssm, logs, instance):
         1642568042037,
     )
     fromTime = instance.get_last_export_time("first")
-    instance.logs.create_export_task = mock.Mock(
-        return_value={"taskId": "I am mocked via mock.Mock"}
-    )
-    # with mock.patch.object('logs', 'create_export_task', return_value="taskId"):
-    """with patch object"""
-    instance.create_export_tasks("first", fromTime, toTime, "s3_bucket", 123412341234)
-    assert instance.logs.create_export_task.called
-    instance.logs.create_export_task.assert_called
+    with mock.patch.object( instance.logs, 'create_export_task', return_value={"taskId": "I am mocked via mock.Mock"} ):
+        instance.create_export_tasks(
+            "/log-exporter-last-export/first", fromTime, toTime, "s3_bucket", 123412341234
+        )
+        # assert instance.logs.create_export_task.called
+    # instance.create_export_tasks("first", fromTime, toTime, "s3_bucket", 123412341234)
+        assert instance.logs.create_export_task.called
+        instance.logs.create_export_task.assert_called
     instance.logs.create_export_task.assert_called_with(
         logGroupName=log_group_name,
         fromTime=int(fromTime),
