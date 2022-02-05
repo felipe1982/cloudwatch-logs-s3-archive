@@ -131,4 +131,6 @@ def lambda_handler(event: dict, context: dict):
             toTime,
             s3_bucket,
         )
-        c.create_export_tasks(log_group_name, fromTime, toTime, s3_bucket, account_id)
+        return c.create_export_tasks(
+            log_group_name, fromTime, toTime, s3_bucket, account_id
+        )
