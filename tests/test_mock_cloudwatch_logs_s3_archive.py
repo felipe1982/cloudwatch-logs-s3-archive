@@ -164,7 +164,17 @@ def test_lambda_handler_function_from_import(ssm, logs):
     os.environ["S3_BUCKET"] = "mybucket"
     os.environ["ACCOUNT_ID"] = "123412341234"
 
-    lambda_handler(event, context)
+def test_lambda_handler_function_from_import_bad_account_id(
+    ssm, logs, cwlog_resources, s3_resources
+):
+    from src.cloudwatch_logs_s3_archive import lambda_handler
+
+    event = context = {}
+    os.environ["S3_BUCKET"] = s3_resources
+    os.environ["ACCOUNT_ID"] = "1"
+
+    with pytest.raises(ValueError):
+        lambda_handler(event, context)
 
 
 def test_lambda_handler_function_import_bad_account_id(
