@@ -13,8 +13,10 @@ aws-lambda-powertools = "*"
 pyyaml = "*"
 flake8 = "*"
 black = "<=21.12b0"
+coverage = "*"
 
 [dev-packages]
+boto3-stubs = {version = "==1.20.47", extras = ["logs", "s3", "ssm"]}
 
 [requires]
 python_version = "3.8"
